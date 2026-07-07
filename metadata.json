@@ -1,0 +1,6 @@
+{
+  "name": "Mihiretu View",
+  "description": "A professional web trading platform replicating the TradingView user experience, powered by Deriv live WebSocket API, support for interactive trendlines, horizontal lines, and risk/reward calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
