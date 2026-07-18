@@ -56,6 +56,10 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
   // Snapping state
   const [snappedPoint, setSnappedPoint] = useState<DrawingPoint | null>(null);
 
+  // Touch gesture refs for mobile support
+  const touchStartRef = useRef<{ startX: number; startY: number; startScrollOffset: number; isDraggingDrawing: boolean } | null>(null);
+  const touchPinchRef = useRef<{ startDist: number; startCandleWidth: number; startScrollOffset: number; centerX: number; indexAtCenter: number } | null>(null);
+
   // Compute GTA Trend Filter results
   const gtaResults = useMemo(() => {
     if (!settings.indicators.showGTA || candles.length === 0) return [];
@@ -1967,6 +1971,375 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
     return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
   };
 
+  // Mobile Touch Handlers
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || candles.length === 0) return;
+    
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      if (x > chartWidth || y > chartHeight) return; // ignore scales
+
+      const snap = calculateSnapping(x, y);
+      const spaceCoord = snap || getSpaceCoords(x, y);
+
+      // 1. ACTIVE DRAWING MODE
+      if (activeTool !== 'cursor') {
+        if (activeTool === 'trend') {
+          if (!isDrawingInProgress) {
+            setIsDrawingInProgress(true);
+            setNewDrawingPoints([spaceCoord]);
+          } else {
+            const finalPoints = [...newDrawingPoints, spaceCoord];
+            const newDrawing: Drawing = {
+              id: 'drawing_' + Date.now(),
+              type: 'trend',
+              points: finalPoints,
+              color: '#2196f3',
+              lineWidth: 2,
+            };
+            setDrawings((prev) => [...prev, newDrawing]);
+            setIsDrawingInProgress(false);
+            setNewDrawingPoints([]);
+            setActiveTool('cursor');
+          }
+        } else if (activeTool === 'horizontal') {
+          const newDrawing: Drawing = {
+            id: 'drawing_' + Date.now(),
+            type: 'horizontal',
+            points: [spaceCoord],
+            color: '#e040fb',
+            lineWidth: 2,
+          };
+          setDrawings((prev) => [...prev, newDrawing]);
+          setActiveTool('cursor');
+        } else if (activeTool === 'risk_reward') {
+          const entryPrice = spaceCoord.price;
+          const targetPrice = entryPrice * 1.02;
+          const stopPrice = entryPrice * 0.99;
+          const newDrawing: Drawing = {
+            id: 'drawing_' + Date.now(),
+            type: 'risk_reward',
+            points: [spaceCoord],
+            color: '#2196f3',
+            lineWidth: 1.5,
+            riskReward: {
+              isLong: true,
+              entryPrice,
+              targetPrice,
+              stopPrice,
+              riskAmount: 100,
+              lotSize: 1,
+            },
+          };
+          setDrawings((prev) => [...prev, newDrawing]);
+          setActiveTool('cursor');
+        }
+        return;
+      }
+
+      // 2. CURSOR/EDITING SELECTION MODE
+      // Check if clicked close to handles of selected drawing
+      let foundHandle = false;
+      for (let i = drawings.length - 1; i >= 0; i--) {
+        const d = drawings[i];
+        if (d.id === selectedDrawingId) {
+          if (d.type === 'trend') {
+            const p1 = getCanvasCoords(d.points[0]);
+            const p2 = getCanvasCoords(d.points[1]);
+
+            if (Math.hypot(x - p1.x, y - p1.y) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(0);
+              foundHandle = true;
+              break;
+            }
+            if (Math.hypot(x - p2.x, y - p2.y) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(1);
+              foundHandle = true;
+              break;
+            }
+          } else if (d.type === 'horizontal') {
+            const p1 = getCanvasCoords(d.points[0]);
+            if (Math.hypot(x - chartWidth / 2, y - p1.y) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(0);
+              foundHandle = true;
+              break;
+            }
+          } else if (d.type === 'risk_reward' && d.riskReward) {
+            const entryY = getYFromPrice(d.riskReward.entryPrice);
+            const targetY = getYFromPrice(d.riskReward.targetPrice);
+            const stopY = getYFromPrice(d.riskReward.stopPrice);
+            const anchorX = getCanvasCoords(d.points[0]).x;
+
+            if (Math.hypot(x - anchorX, y - targetY) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(0);
+              foundHandle = true;
+              break;
+            }
+            if (Math.hypot(x - anchorX, y - entryY) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(1);
+              foundHandle = true;
+              break;
+            }
+            if (Math.hypot(x - anchorX, y - stopY) < 22) {
+              setDraggedDrawingId(d.id);
+              setDraggedHandleIndex(2);
+              foundHandle = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (foundHandle) {
+        touchStartRef.current = {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startScrollOffset: scrollOffset,
+          isDraggingDrawing: true,
+        };
+        return;
+      }
+
+      // Check if clicked on a drawing's body
+      let foundBody = false;
+      for (let i = drawings.length - 1; i >= 0; i--) {
+        const d = drawings[i];
+        if (d.type === 'horizontal') {
+          const py = getYFromPrice(d.points[0].price);
+          if (Math.abs(y - py) < 18) {
+            setSelectedDrawingId(d.id);
+            setDraggedDrawingId(d.id);
+            setDraggedHandleIndex(null);
+            setDragOffset(spaceCoord);
+            foundBody = true;
+            break;
+          }
+        } else if (d.type === 'trend' && d.points.length >= 2) {
+          const p1 = getCanvasCoords(d.points[0]);
+          const p2 = getCanvasCoords(d.points[1]);
+          const dist = distToSegment({ x, y }, p1, p2);
+          if (dist < 18) {
+            setSelectedDrawingId(d.id);
+            setDraggedDrawingId(d.id);
+            setDraggedHandleIndex(null);
+            setDragOffset(spaceCoord);
+            foundBody = true;
+            break;
+          }
+        } else if (d.type === 'risk_reward' && d.riskReward) {
+          const config = d.riskReward;
+          const entryY = getYFromPrice(config.entryPrice);
+          const targetY = getYFromPrice(config.targetPrice);
+          const stopY = getYFromPrice(config.stopPrice);
+          const anchorX = getCanvasCoords(d.points[0]).x;
+          const left = anchorX;
+          const right = anchorX + 180;
+          const topY = Math.min(targetY, stopY);
+          const botY = Math.max(targetY, stopY);
+
+          if (x >= left && x <= right && y >= topY && y <= botY) {
+            setSelectedDrawingId(d.id);
+            setDraggedDrawingId(d.id);
+            setDraggedHandleIndex(null);
+            setDragOffset(spaceCoord);
+            foundBody = true;
+            break;
+          }
+        }
+      }
+
+      if (foundBody) {
+        touchStartRef.current = {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startScrollOffset: scrollOffset,
+          isDraggingDrawing: true,
+        };
+        return;
+      }
+
+      // Otherwise pan
+      setSelectedDrawingId(null);
+      touchStartRef.current = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startScrollOffset: scrollOffset,
+        isDraggingDrawing: false,
+      };
+
+      setHoveredCandle(candles[getIndexFromX(x)] || null);
+      setHoveredPrice(getPriceFromY(y));
+      setHoveredTime(getSpaceCoords(x, y).time);
+      setMousePos({ x, y });
+    } else if (e.touches.length === 2) {
+      // Pinch to Zoom
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const centerX = (t1.clientX + t2.clientX) / 2 - rect.left;
+      const index = getIndexFromX(centerX);
+
+      touchPinchRef.current = {
+        startDist: dist,
+        startCandleWidth: candleWidth,
+        startScrollOffset: scrollOffset,
+        centerX,
+        indexAtCenter: index,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || candles.length === 0) return;
+
+    if (e.touches.length === 1 && touchStartRef.current) {
+      const touch = e.touches[0];
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      const { startX, startScrollOffset, isDraggingDrawing } = touchStartRef.current;
+
+      if (isDraggingDrawing) {
+        const snap = calculateSnapping(x, y);
+        const currentCoord = snap || getSpaceCoords(x, y);
+
+        if (draggedDrawingId) {
+          const drawingIdx = drawings.findIndex((d) => d.id === draggedDrawingId);
+          if (drawingIdx !== -1) {
+            const drawing = drawings[drawingIdx];
+
+            if (draggedHandleIndex !== null && draggedHandleIndex >= 0) {
+              const updatedDrawings = [...drawings];
+              const updatedDrawing = { ...drawing };
+              const updatedPoints = [...updatedDrawing.points];
+
+              if (drawing.type === 'trend' && draggedHandleIndex < 2) {
+                updatedPoints[draggedHandleIndex] = currentCoord;
+              } else if (drawing.type === 'risk_reward' && drawing.riskReward) {
+                const config = { ...drawing.riskReward };
+                if (draggedHandleIndex === 0) {
+                  config.targetPrice = currentCoord.price;
+                } else if (draggedHandleIndex === 1) {
+                  config.entryPrice = currentCoord.price;
+                } else if (draggedHandleIndex === 2) {
+                  config.stopPrice = currentCoord.price;
+                }
+                updatedDrawing.riskReward = config;
+                updatedPoints[0] = { time: currentCoord.time, price: config.entryPrice };
+              }
+
+              updatedDrawing.points = updatedPoints;
+              updatedDrawings[drawingIdx] = updatedDrawing;
+              setDrawings(updatedDrawings);
+            } else if (dragOffset) {
+              const updatedDrawings = [...drawings];
+              const updatedDrawing = { ...drawing };
+
+              if (drawing.type === 'horizontal') {
+                updatedDrawing.points = [{
+                  time: currentCoord.time,
+                  price: currentCoord.price,
+                }];
+              } else if (drawing.type === 'trend') {
+                const deltaPrice = currentCoord.price - dragOffset.price;
+                const targetTimeIndex = candles.findIndex(c => c.time === currentCoord.time);
+                const sourceTimeIndex = candles.findIndex(c => c.time === dragOffset.time);
+                
+                let deltaIndex = 0;
+                if (targetTimeIndex !== -1 && sourceTimeIndex !== -1) {
+                  deltaIndex = targetTimeIndex - sourceTimeIndex;
+                }
+
+                const updatedPoints = drawing.points.map((p) => {
+                  let pIdx = candles.findIndex(c => c.time === p.time);
+                  if (pIdx === -1) pIdx = 0;
+                  const newIdx = Math.max(0, Math.min(candles.length - 1, pIdx + deltaIndex));
+                  return {
+                    time: candles[newIdx].time,
+                    price: p.price + deltaPrice,
+                  };
+                });
+
+                updatedDrawing.points = updatedPoints;
+                setDragOffset({ time: currentCoord.time, price: currentCoord.price });
+              } else if (drawing.type === 'risk_reward' && drawing.riskReward) {
+                const deltaPrice = currentCoord.price - dragOffset.price;
+                const config = { ...drawing.riskReward };
+                config.entryPrice += deltaPrice;
+                config.targetPrice += deltaPrice;
+                config.stopPrice += deltaPrice;
+
+                updatedDrawing.points = [currentCoord];
+                updatedDrawing.riskReward = config;
+                setDragOffset(currentCoord);
+              }
+
+              updatedDrawings[drawingIdx] = updatedDrawing;
+              setDrawings(updatedDrawings);
+            }
+          }
+        }
+      } else {
+        const deltaX = touch.clientX - startX;
+        const maxScroll = candles.length * candleWidth;
+        const minScroll = -chartWidth / 2;
+        setScrollOffset(Math.max(minScroll, Math.min(maxScroll, startScrollOffset + deltaX)));
+      }
+
+      setMousePos({ x, y });
+      const idx = getIndexFromX(x);
+      if (idx >= 0 && idx < candles.length) {
+        setHoveredCandle(candles[idx]);
+      } else {
+        setHoveredCandle(null);
+      }
+      setHoveredPrice(getPriceFromY(y));
+      setHoveredTime(getSpaceCoords(x, y).time);
+      const snap = calculateSnapping(x, y);
+      setSnappedPoint(snap);
+    } else if (e.touches.length === 2 && touchPinchRef.current) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+      const { startDist, startCandleWidth, startScrollOffset, centerX, indexAtCenter } = touchPinchRef.current;
+      
+      const ratio = dist / startDist;
+      const newCandleWidth = Math.max(1.5, Math.min(80, startCandleWidth * ratio));
+
+      if (newCandleWidth !== candleWidth) {
+        const paddingRight = 50;
+        const newScrollOffset = centerX - (chartWidth - paddingRight) + (candles.length - 1 - indexAtCenter) * newCandleWidth;
+
+        setCandleWidth(newCandleWidth);
+        setScrollOffset(newScrollOffset);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+    touchPinchRef.current = null;
+    if (draggedDrawingId) {
+      setDraggedDrawingId(null);
+      setDraggedHandleIndex(null);
+      setDragOffset(null);
+      saveDrawingsToLocalStorage();
+    }
+  };
+
   // Zooming with mouse wheel (towards cursor position)
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -2084,6 +2457,9 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className="w-full flex-grow cursor-crosshair block"
         style={{ touchAction: 'none' }}
       />

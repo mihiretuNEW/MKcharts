@@ -49,39 +49,39 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       className="h-14 bg-black border-b border-neutral-800 flex items-center justify-between px-4 select-none z-20"
     >
       {/* Brand Title and Symbol Selection dropdown */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         {/* Replace TradingView logo with Mihiretu View */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black tracking-tighter shadow-lg shadow-blue-600/30">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black tracking-tighter shadow-lg shadow-blue-600/30 shrink-0">
             MV
           </div>
-          <span className="font-sans font-extrabold text-base tracking-tight text-white">
+          <span className="font-sans font-extrabold text-base tracking-tight text-white hidden sm:inline">
             Mihiretu <span className="text-blue-500 font-normal">View</span>
           </span>
         </div>
 
         {/* Separator */}
-        <div className="w-px h-6 bg-neutral-800" />
+        <div className="w-px h-6 bg-neutral-800 hidden sm:block" />
 
         {/* Dynamic symbol selector dropdown button */}
         <button
           id="btn-trigger-symbol-modal"
           onClick={onOpenSymbolModal}
-          className="flex items-center gap-2 px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg border border-neutral-800 text-xs font-bold font-mono transition-all duration-150 hover:scale-[1.02]"
+          className="flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg border border-neutral-800 text-xs font-bold font-mono transition-all duration-150 hover:scale-[1.02]"
         >
           <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
           <span>{selectedSymbol}</span>
-          <span className="text-[10px] text-gray-400 font-normal truncate max-w-[120px] hidden sm:inline">
+          <span className="text-[10px] text-gray-400 font-normal truncate max-w-[120px] hidden md:inline">
             {symbolInfo ? `(${symbolInfo.display_name})` : ''}
           </span>
-          <span className="text-[8px] bg-blue-900/50 text-blue-300 font-sans px-1 rounded uppercase">
+          <span className="text-[8px] bg-blue-900/50 text-blue-300 font-sans px-1 rounded uppercase hidden sm:inline">
             Select
           </span>
         </button>
       </div>
 
       {/* Center Timeframe selection buttons */}
-      <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 max-w-full overflow-x-auto">
+      <div className="flex items-center gap-0.5 sm:gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 max-w-full overflow-x-auto scrollbar-none">
         {TIMEFRAMES.map((tf) => {
           const isActive = selectedTimeframe === tf.id;
           return (
@@ -89,7 +89,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               id={`tf-select-${tf.id}`}
               key={tf.id}
               onClick={() => onSelectTimeframe(tf.id)}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+              className={`px-1.5 py-1 sm:px-3 sm:py-1 rounded text-[10px] sm:text-xs font-bold transition-all ${
                 isActive 
                   ? 'bg-blue-600 text-white shadow-md' 
                   : 'text-gray-400 hover:text-white hover:bg-neutral-800'
