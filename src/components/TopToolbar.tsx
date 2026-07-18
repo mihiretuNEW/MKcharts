@@ -6,7 +6,8 @@
 import React from 'react';
 import { TimeframeId, SymbolInfo } from '../types';
 import { TIMEFRAMES } from '../hooks/useDerivWS';
-import { Sparkles, Settings, Globe, ArrowUpRight, TrendingUp, Sun, Moon } from 'lucide-react';
+import { Sparkles, Settings, Globe, ArrowUpRight, TrendingUp, Sun, Moon, LogOut } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 interface TopToolbarProps {
   selectedSymbol: string;
@@ -34,6 +35,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onToggleTheme,
 }) => {
   const symbolInfo = symbols.find((s) => s.symbol === selectedSymbol);
+  const { logout } = useAuth();
 
   const handleIndicatorClick = () => {
     if (onOpenIndicators) {
@@ -133,6 +135,16 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           className="p-2 hover:bg-neutral-800 text-gray-300 hover:text-white rounded-lg transition-colors flex items-center justify-center"
         >
           <Settings className="w-4.5 h-4.5" />
+        </button>
+
+        {/* Logout trigger */}
+        <button
+          id="btn-trigger-logout"
+          onClick={logout}
+          title="Log Out"
+          className="p-2 hover:bg-red-950/30 text-gray-400 hover:text-red-400 rounded-lg transition-colors flex items-center justify-center"
+        >
+          <LogOut className="w-4.5 h-4.5" />
         </button>
 
         {/* Separator */}

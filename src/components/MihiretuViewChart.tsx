@@ -8,7 +8,7 @@ import { Candle, Drawing, DrawingPoint, DrawingType, ChartSettings, RiskRewardCo
 import { ZoomIn, ZoomOut, RotateCcw, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { TIMEFRAMES } from '../hooks/useDerivWS';
 import { calculateGTATrend } from '../utils/gtaIndicator';
-import { calculateTrendlinesWithBreaks, calculateSmartMoneyConcepts, calculateSignalsAndOverlays, calculateConfluenceFVG, FVGZone } from '../utils/premiumIndicators';
+import { calculateTrendlinesWithBreaks, calculateSmartMoneyConcepts, calculateSignalsAndOverlays, calculateConfluenceFVG, FVGZone, calculateIctConcepts } from '../utils/premiumIndicators';
 
 interface MihiretuViewChartProps {
   candles: Candle[];
@@ -127,6 +127,12 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
     if (!settings.indicators.showConfluenceFVG || candles.length === 0) return null;
     return calculateConfluenceFVG(candles, timeframe, settings.indicators);
   }, [candles, timeframe, settings.indicators]);
+
+  // Compute ICT Concepts
+  const ictResults = useMemo(() => {
+    if (!settings.indicators.showIctConcepts || candles.length === 0) return null;
+    return calculateIctConcepts(candles, settings.indicators);
+  }, [candles, settings.indicators]);
 
   const RIGHT_SCALE_WIDTH = 75;
   const BOTTOM_SCALE_HEIGHT = 28;
@@ -963,6 +969,245 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
       ctx.restore();
     }
 
+    // ==========================================
+    // Render ICT Concepts (LuxAlgo)
+    // ==========================================
+    if (settings.indicators.showIctConcepts && ictResults) {
+      ctx.save();
+
+      // Helper to convert hex to RGBA
+      const hexToRgba = (hex: string, alpha: number) => {
+        const cleanHex = hex.replace('#', '');
+        const r = parseInt(cleanHex.substring(0, 2), 16) || 128;
+        const g = parseInt(cleanHex.substring(2, 4), 16) || 128;
+        const b = parseInt(cleanHex.substring(4, 6), 16) || 128;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      };
+
+      // 1. Draw Volume Imbalances (VI)
+      if (settings.indicators.ictShowVolumeImbalance) {
+        ictResults.volumeImbalances.forEach((vi) => {
+          const startX = getCanvasCoords({ time: vi.time, price: 0 }).x;
+          const topY = getYFromPrice(vi.top);
+          const botY = getYFromPrice(vi.bottom);
+          const height = botY - topY;
+
+          let endX = chartWidth;
+          if (vi.endTime !== null) {
+            endX = getCanvasCoords({ time: vi.endTime, price: 0 }).x;
+          }
+
+          if (startX > chartWidth || (vi.endTime !== null && endX < 0)) return;
+
+          const baseColor = vi.isBullish ? settings.indicators.ictViBullishColor : settings.indicators.ictViBearishColor;
+          ctx.fillStyle = hexToRgba(baseColor, 0.12);
+          ctx.strokeStyle = hexToRgba(baseColor, 0.35);
+          ctx.lineWidth = 1;
+
+          ctx.fillRect(startX, topY, endX - startX, height);
+          ctx.strokeRect(startX, topY, endX - startX, height);
+
+          // Draw label "VI" inside
+          if (vi.endTime === null && startX < chartWidth - 30) {
+            ctx.fillStyle = baseColor;
+            ctx.font = 'bold 8px "Inter", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('VI', startX + 5, (topY + botY) / 2 + 3);
+          }
+        });
+      }
+
+      // 2. Draw Buyside / Sellside Liquidity (BSL & SSL)
+      if (settings.indicators.ictShowLiquidity) {
+        ictResults.liquidityZones.forEach((lz) => {
+          const startX = getCanvasCoords({ time: lz.time, price: 0 }).x;
+          const y = getYFromPrice(lz.price);
+
+          let endX = chartWidth;
+          if (lz.endTime !== null) {
+            endX = getCanvasCoords({ time: lz.endTime, price: 0 }).x;
+          }
+
+          if (startX > chartWidth || (lz.endTime !== null && endX < 0)) return;
+
+          const isBsl = lz.isBuyside;
+          const baseColor = isBsl ? settings.indicators.ictLiqBearishColor : settings.indicators.ictLiqBullishColor; // Red for BSL, Blue/Cyan for SSL
+          ctx.strokeStyle = baseColor;
+          ctx.lineWidth = lz.endTime === null ? 1.5 : 1.0;
+          ctx.setLineDash(lz.endTime === null ? [] : [3, 3]);
+
+          ctx.beginPath();
+          ctx.moveTo(startX, y);
+          ctx.lineTo(endX, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Shading band
+          ctx.fillStyle = hexToRgba(baseColor, 0.04);
+          const bandHeight = 6;
+          ctx.fillRect(startX, isBsl ? y - bandHeight : y, endX - startX, bandHeight);
+
+          // Text labels "Buyside Liquidity" / "Sellside Liquidity"
+          if (lz.endTime === null && startX < chartWidth - 80) {
+            ctx.fillStyle = baseColor;
+            ctx.font = 'bold 9px "Inter", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(isBsl ? 'Buyside Liquidity' : 'Sellside Liquidity', startX + 10, isBsl ? y - 3 : y + 9);
+          }
+        });
+      }
+
+      // 3. Draw Order Blocks (OB)
+      if (settings.indicators.ictShowOrderBlocks) {
+        ictResults.orderBlocks.forEach((ob) => {
+          const startX = getCanvasCoords({ time: ob.time, price: 0 }).x;
+          const topY = getYFromPrice(ob.top);
+          const botY = getYFromPrice(ob.bottom);
+          const height = botY - topY;
+
+          let endX = chartWidth;
+          if (ob.endTime !== null) {
+            endX = getCanvasCoords({ time: ob.endTime, price: 0 }).x;
+          }
+
+          if (startX > chartWidth || (ob.endTime !== null && endX < 0)) return;
+
+          const baseColor = ob.isBullish ? settings.indicators.ictObBullishColor : settings.indicators.ictObBearishColor;
+          ctx.fillStyle = hexToRgba(baseColor, 0.1);
+          ctx.strokeStyle = hexToRgba(baseColor, 0.4);
+          ctx.lineWidth = ob.endTime === null ? 1.5 : 1.0;
+
+          ctx.fillRect(startX, topY, endX - startX, height);
+          ctx.strokeRect(startX, topY, endX - startX, height);
+
+          // OB Label
+          if (ob.endTime === null && startX < chartWidth - 40) {
+            ctx.fillStyle = baseColor;
+            ctx.font = 'bold 9px "Inter", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(ob.isBullish ? '+OB' : '-OB', startX + 6, topY + 11);
+          }
+        });
+      }
+
+      // 4. Draw Fair Value Gaps (FVG), Inverted FVGs (IFVGs) & Balanced Price Ranges (BPR)
+      if (settings.indicators.ictFvgOption !== 'NONE') {
+        ictResults.fvgs.forEach((f) => {
+          const startX = getCanvasCoords({ time: f.time, price: 0 }).x;
+          const topY = getYFromPrice(f.top);
+          const botY = getYFromPrice(f.bottom);
+          const height = botY - topY;
+
+          let endX = chartWidth;
+          if (f.endTime !== null) {
+            endX = getCanvasCoords({ time: f.endTime, price: 0 }).x;
+          }
+
+          if (startX > chartWidth || (f.endTime !== null && endX < 0)) return;
+
+          let baseColor = f.isBullish ? settings.indicators.ictFvgBullishColor : settings.indicators.ictFvgBearishColor;
+          let label = f.isBullish ? 'Bull FVG' : 'Bear FVG';
+          let fillOpacity = 0.08;
+
+          if (f.isBpr) {
+            baseColor = '#d27d2d'; // Golden bronze for Balanced Price Range
+            label = 'BPR';
+            fillOpacity = 0.15;
+          } else if (f.isInverted) {
+            label = f.isBullish ? 'Bull IFVG' : 'Bear IFVG';
+            fillOpacity = 0.05;
+          }
+
+          ctx.fillStyle = hexToRgba(baseColor, fillOpacity);
+          ctx.strokeStyle = hexToRgba(baseColor, f.endTime === null ? 0.45 : 0.2);
+          ctx.lineWidth = f.endTime === null ? 1.25 : 1.0;
+
+          ctx.fillRect(startX, topY, endX - startX, height);
+          ctx.strokeRect(startX, topY, endX - startX, height);
+
+          // Draw label inside FVG/IFVG/BPR
+          if (f.endTime === null && startX < chartWidth - 50) {
+            ctx.fillStyle = baseColor;
+            ctx.font = 'bold 9px "Inter", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(label, startX + 8, topY + 11);
+          }
+        });
+      }
+
+      // 5. Draw Market Structure Shift (MSS) and Break of Structure (BOS)
+      if (settings.indicators.ictShowMarketStructure) {
+        ictResults.marketStructures.forEach((ms) => {
+          const startX = getCanvasCoords({ time: ms.time, price: 0 }).x;
+          const breakX = getCanvasCoords({ time: ms.breakTime, price: 0 }).x;
+          const y = getYFromPrice(ms.price);
+
+          if (startX > chartWidth || breakX < 0) return;
+
+          const isBull = ms.isBullish;
+          let color = '#ffffff';
+
+          if (ms.type === 'MSS') {
+            color = isBull ? settings.indicators.ictMssColorBullish : settings.indicators.ictMssColorBearish;
+          } else {
+            color = isBull ? settings.indicators.ictBosColorBullish : settings.indicators.ictBosColorBearish;
+          }
+
+          // Horizontal line from swing point to breakout bar
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(startX, y);
+          ctx.lineTo(breakX, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Draw a small circle at the swing point
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(startX, y, 2.5, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // Draw "MSS" or "BOS" text label neatly floating above/below line
+          const labelText = ms.type;
+          ctx.font = 'bold 9px "Inter", sans-serif';
+          const textW = ctx.measureText(labelText).width;
+          const labelX = (startX + breakX) / 2;
+          const labelY = isBull ? y - 6 : y + 9;
+
+          // Draw small background block for high contrast
+          ctx.fillStyle = 'rgba(19, 23, 34, 0.75)';
+          ctx.fillRect(labelX - textW / 2 - 3, labelY - 8, textW + 6, 11);
+
+          // Draw label text
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.fillText(labelText, labelX, labelY);
+        });
+      }
+
+      // 6. Highlight Displacement Candlesticks
+      if (settings.indicators.ictShowDisplacement) {
+        ictResults.displacements.forEach((time) => {
+          const x = getCanvasCoords({ time, price: 0 }).x;
+          if (x < 0 || x > chartWidth) return;
+
+          // Draw a neat subtle vertical background highlight or cyan tick
+          ctx.fillStyle = 'rgba(0, 230, 118, 0.05)';
+          ctx.fillRect(x - candleWidth / 2, 0, candleWidth, chartHeight);
+
+          // Draw a small elegant displacement marker at the top/bottom of the cell
+          ctx.fillStyle = '#00e676';
+          ctx.font = 'bold 8px "Inter", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('DISP', x, 14);
+        });
+      }
+
+      ctx.restore();
+    }
+
     // 4. Draw Drawings (Trend Lines, Horizontal Lines, Risk/Reward)
     drawings.forEach((drawing) => {
       const isSelected = drawing.id === selectedDrawingId;
@@ -1000,44 +1245,128 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
           const stopY = getYFromPrice(config.stopPrice);
           const anchorX = getCanvasCoords(drawing.points[0]).x;
 
-          // Target box (Green area)
+          const boxWidth = 180;
+          const leftX = anchorX;
+          const rightX = anchorX + boxWidth;
+
+          // 1. Determine position type dynamically if not set
+          const isLong = config.targetPrice >= config.entryPrice;
+
+          // 2. Scan candles starting from the anchor candle to determine if target or stop has been touched/entered
+          const anchorTime = drawing.points[0].time;
+          const startIndex = candles.findIndex(c => c.time === anchorTime);
+          
+          let targetTouched = false;
+          let stopTouched = false;
+          let hitStatus: 'Active' | 'Target Hit' | 'Stopped Out' = 'Active';
+
+          if (startIndex !== -1) {
+            for (let i = startIndex; i < candles.length; i++) {
+              const c = candles[i];
+              if (isLong) {
+                // For Long: Target is above entry (higher price, lower Y), Stop is below entry (lower price, higher Y)
+                if (c.high > config.entryPrice) {
+                  targetTouched = true;
+                }
+                if (c.low < config.entryPrice) {
+                  stopTouched = true;
+                }
+                if (c.high >= config.targetPrice && hitStatus === 'Active') {
+                  hitStatus = 'Target Hit';
+                }
+                if (c.low <= config.stopPrice && hitStatus === 'Active') {
+                  hitStatus = 'Stopped Out';
+                }
+              } else {
+                // For Short: Target is below entry (lower price, higher Y), Stop is above entry (higher price, lower Y)
+                if (c.low < config.entryPrice) {
+                  targetTouched = true;
+                }
+                if (c.high > config.entryPrice) {
+                  stopTouched = true;
+                }
+                if (c.low <= config.targetPrice && hitStatus === 'Active') {
+                  hitStatus = 'Target Hit';
+                }
+                if (c.high >= config.stopPrice && hitStatus === 'Active') {
+                  hitStatus = 'Stopped Out';
+                }
+              }
+            }
+          }
+
+          // Target and Stop heights & regions
           const targetHeight = Math.abs(entryY - targetY);
           const targetTop = Math.min(entryY, targetY);
-          ctx.fillStyle = 'rgba(76, 175, 80, 0.2)'; // semi-transparent green
-          ctx.fillRect(anchorX - 100, targetTop, 200, targetHeight);
-
-          // Stop loss box (Red area)
           const stopHeight = Math.abs(entryY - stopY);
           const stopTop = Math.min(entryY, stopY);
-          ctx.fillStyle = 'rgba(239, 83, 80, 0.2)'; // semi-transparent red
-          ctx.fillRect(anchorX - 100, stopTop, 200, stopHeight);
 
-          // Draw borders and center dividing lines
-          ctx.lineWidth = 1.5;
-          ctx.strokeStyle = '#4caf50'; // Green
-          ctx.strokeRect(anchorX - 100, targetTop, 200, targetHeight);
-          ctx.strokeStyle = '#ef5350'; // Red
-          ctx.strokeRect(anchorX - 100, stopTop, 200, stopHeight);
+          // 3. Render Target & Stop box interior colorful fills (MT5 Style)
+          // "inside the square must be colorful, others get more bold when candles go that area"
+          ctx.fillStyle = targetTouched ? 'rgba(76, 175, 80, 0.45)' : 'rgba(76, 175, 80, 0.12)';
+          ctx.fillRect(leftX, targetTop, boxWidth, targetHeight);
 
-          // Render Text details inside the boxes
-          ctx.fillStyle = isDark ? '#ffffff' : '#131722';
-          ctx.font = '10px Inter, sans-serif';
+          ctx.fillStyle = stopTouched ? 'rgba(239, 83, 80, 0.45)' : 'rgba(239, 83, 80, 0.12)';
+          ctx.fillRect(leftX, stopTop, boxWidth, stopHeight);
+
+          // 4. Render Outline Frames
+          ctx.lineWidth = isSelected ? 2.5 : 1.5;
+          ctx.strokeStyle = '#2e7d32'; // Green border
+          ctx.strokeRect(leftX, targetTop, boxWidth, targetHeight);
+
+          ctx.strokeStyle = '#c62828'; // Red border
+          ctx.strokeRect(leftX, stopTop, boxWidth, stopHeight);
+
+          // 5. Draw solid header bars and text (Exactly like MT5 / Photo)
+          const barHeight = 20;
+          const decimals = config.entryPrice.toString().split('.')[1]?.length || 3;
+
+          // SL bar (At the topmost boundary for Short, bottommost for Long)
+          const slBarY = isLong ? stopY - barHeight : stopY;
+          ctx.fillStyle = '#b71c1c'; // Solid MT5 Red
+          ctx.fillRect(leftX, slBarY, boxWidth, barHeight);
+
+          const riskVal = Math.abs(config.entryPrice - config.stopPrice);
+          const slText = `SL : ${config.stopPrice.toFixed(decimals)} - RISK : ${riskVal.toFixed(decimals)}`;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px Inter, sans-serif';
           ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(slText, leftX + boxWidth / 2, slBarY + barHeight / 2);
 
-          // RR Ratio Calculation
+          // TP bar (At the topmost boundary for Long, bottommost for Short)
+          const tpBarY = isLong ? targetY : targetY - barHeight;
+          ctx.fillStyle = '#1b5e20'; // Solid MT5 Green
+          ctx.fillRect(leftX, tpBarY, boxWidth, barHeight);
+
+          const rewardVal = Math.abs(config.targetPrice - config.entryPrice);
+          const tpText = `TP : ${config.targetPrice.toFixed(decimals)} - REWARD : ${rewardVal.toFixed(decimals)}`;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(tpText, leftX + boxWidth / 2, tpBarY + barHeight / 2);
+
+          // OPEN bar (Centered on the entry level line)
+          const entryBarY = entryY - barHeight / 2;
+          ctx.fillStyle = '#424242'; // Solid MT5 Grey
+          ctx.fillRect(leftX, entryBarY, boxWidth, barHeight);
+
           const targetPips = Math.abs(config.targetPrice - config.entryPrice);
           const stopPips = Math.abs(config.entryPrice - config.stopPrice);
           const rrRatio = stopPips > 0 ? (targetPips / stopPips).toFixed(2) : '0.00';
+          const entryText = `OPEN : ${config.entryPrice.toFixed(decimals)} - R/R Ratio : ${rrRatio}`;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(entryText, leftX + boxWidth / 2, entryBarY + barHeight / 2);
 
-          const middleTextY = entryY - 4;
-          ctx.fillStyle = isDark ? '#90caf9' : '#0d47a1';
-          ctx.fillText(`Risk/Reward: ${rrRatio}`, anchorX, middleTextY);
-
-          // Draw selected handles
+          // 7. Draw selected handles
           if (isSelected) {
-            drawHandle(ctx, anchorX, targetY, '#4caf50'); // Target Handle
+            drawHandle(ctx, anchorX, targetY, '#089981'); // Target Handle
             drawHandle(ctx, anchorX, entryY, '#2196f3');  // Entry Handle
-            drawHandle(ctx, anchorX, stopY, '#ef5350');   // Stop Handle
+            drawHandle(ctx, anchorX, stopY, '#f23645');   // Stop Handle
           }
         }
       }
@@ -1569,8 +1898,8 @@ export const MihiretuViewChart: React.FC<MihiretuViewChartProps> = ({
         const stopY = getYFromPrice(config.stopPrice);
         const anchorX = getCanvasCoords(d.points[0]).x;
 
-        const left = anchorX - 100;
-        const right = anchorX + 100;
+        const left = anchorX;
+        const right = anchorX + 180;
         const topY = Math.min(targetY, stopY);
         const botY = Math.max(targetY, stopY);
 

@@ -973,3 +973,596 @@ export function calculateConfluenceFVG(
 
   return { bullZones, bearZones };
 }
+
+// ==========================================
+// ICT Concepts (LuxAlgo) | ProjectSyndicate
+// ==========================================
+
+export interface IctMarketStructure {
+  id: string;
+  type: 'MSS' | 'BOS';
+  isBullish: boolean;
+  price: number;
+  time: number;       // time of swing point
+  breakTime: number;  // time of break
+}
+
+export interface IctOrderBlock {
+  id: string;
+  isBullish: boolean;
+  top: number;
+  bottom: number;
+  time: number;
+  endTime: number | null; // mitigated time
+}
+
+export interface IctLiquidityZone {
+  id: string;
+  isBuyside: boolean; // true = Buyside, false = Sellside
+  price: number;
+  time: number;
+  endTime: number | null; // swept time
+}
+
+export interface IctVolumeImbalance {
+  id: string;
+  isBullish: boolean;
+  top: number;
+  bottom: number;
+  time: number;
+  endTime: number | null; // filled/mitigated time
+}
+
+export interface IctFvgZone {
+  id: string;
+  isBullish: boolean;
+  isInverted: boolean;
+  isBpr: boolean; // Balanced Price Range
+  top: number;
+  bottom: number;
+  time: number;
+  endTime: number | null; // mitigated time
+}
+
+export interface IctConceptsResult {
+  marketStructures: IctMarketStructure[];
+  orderBlocks: IctOrderBlock[];
+  liquidityZones: IctLiquidityZone[];
+  volumeImbalances: IctVolumeImbalance[];
+  fvgs: IctFvgZone[];
+  displacements: number[]; // timestamps of displacement candles
+}
+
+export function calculateIctConcepts(
+  candles: Candle[],
+  settings: {
+    ictMode: 'Present' | 'Historical';
+    ictShowMarketStructure: boolean;
+    ictMsLength: number;
+    ictShowMSS: boolean;
+    ictShowBOS: boolean;
+    ictShowDisplacement: boolean;
+    ictShowVolumeImbalance: boolean;
+    ictViMaxBoxes: number;
+    ictShowOrderBlocks: boolean;
+    ictObLookback: number;
+    ictObMaxCount: number;
+    ictShowLiquidity: boolean;
+    ictLiqSensitivity: number;
+    ictLiqMaxBoxes: number;
+    ictFvgOption: 'FVG' | 'IFVG' | 'NONE';
+    ictFvgShowBullish?: boolean;
+    ictFvgShowBearish?: boolean;
+    ictFvgMaxCount: number;
+    ictFvgBalancePriceRange: boolean;
+    [key: string]: any;
+  }
+): IctConceptsResult {
+  const result: IctConceptsResult = {
+    marketStructures: [],
+    orderBlocks: [],
+    liquidityZones: [],
+    volumeImbalances: [],
+    fvgs: [],
+    displacements: [],
+  };
+
+  if (candles.length < 10) return result;
+
+  // Handle Present mode (last 500 bars)
+  let workingCandles = candles;
+  let offsetIndex = 0;
+  if (settings.ictMode === 'Present') {
+    const presentLimit = 500;
+    if (candles.length > presentLimit) {
+      offsetIndex = candles.length - presentLimit;
+      workingCandles = candles.slice(offsetIndex);
+    }
+  }
+
+  const n = workingCandles.length;
+  const atr = calculateATR(workingCandles, 14);
+
+  // 1. Calculate Swing Highs / Swing Lows for Market Structure
+  const msLength = settings.ictMsLength;
+  const isSwingHigh = (idx: number): boolean => {
+    if (idx < msLength || idx >= n - msLength) return false;
+    const h = workingCandles[idx].high;
+    for (let j = idx - msLength; j <= idx + msLength; j++) {
+      if (j !== idx && workingCandles[j].high >= h) return false;
+    }
+    return true;
+  };
+
+  const isSwingLow = (idx: number): boolean => {
+    if (idx < msLength || idx >= n - msLength) return false;
+    const l = workingCandles[idx].low;
+    for (let j = idx - msLength; j <= idx + msLength; j++) {
+      if (j !== idx && workingCandles[j].low <= l) return false;
+    }
+    return true;
+  };
+
+  // 2. Track Market Structure (MSS & BOS)
+  // Let's sweep left-to-right to find structure breaks.
+  let lastStructureDirection: 'bullish' | 'bearish' | null = null;
+  const activeSwingHighs: { price: number; time: number; idx: number }[] = [];
+  const activeSwingLows: { price: number; time: number; idx: number }[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const c = workingCandles[i];
+
+    // Check if current candle is a swing point
+    if (isSwingHigh(i)) {
+      activeSwingHighs.push({ price: c.high, time: c.time, idx: i });
+    }
+    if (isSwingLow(i)) {
+      activeSwingLows.push({ price: c.low, time: c.time, idx: i });
+    }
+
+    // Check for breaks of active swing highs
+    if (settings.ictShowMarketStructure) {
+      for (let sIdx = activeSwingHighs.length - 1; sIdx >= 0; sIdx--) {
+        const sh = activeSwingHighs[sIdx];
+        if (i > sh.idx && c.close > sh.price) {
+          // Bullish Break!
+          const type = (lastStructureDirection === 'bearish' || lastStructureDirection === null) ? 'MSS' : 'BOS';
+          const shouldAdd = type === 'MSS' ? settings.ictShowMSS : settings.ictShowBOS;
+          
+          if (shouldAdd) {
+            result.marketStructures.push({
+              id: `ms-bull-${sh.time}-${i}`,
+              type,
+              isBullish: true,
+              price: sh.price,
+              time: sh.time,
+              breakTime: c.time,
+            });
+
+            // 3. Create Order Block (+OB) upon break of structure
+            if (settings.ictShowOrderBlocks) {
+              // Find the lowest down-close candle within the consolidation block preceding the swing point
+              let obTop = 0;
+              let obBot = 0;
+              let obTime = 0;
+              let foundOb = false;
+
+              // Scan back starting from swing high index (sh.idx)
+              const lookbackLimit = Math.max(0, sh.idx - settings.ictObLookback);
+              let lowestPrice = Infinity;
+              for (let k = sh.idx; k >= lookbackLimit; k--) {
+                const candleK = workingCandles[k];
+                if (candleK.close < candleK.open) { // Down-close
+                  if (candleK.low < lowestPrice) {
+                    lowestPrice = candleK.low;
+                    obTop = Math.max(candleK.open, candleK.close);
+                    obBot = Math.min(candleK.open, candleK.close);
+                    obTime = candleK.time;
+                    foundOb = true;
+                  }
+                }
+              }
+
+              if (foundOb) {
+                result.orderBlocks.push({
+                  id: `ob-bull-${obTime}`,
+                  isBullish: true,
+                  top: obTop,
+                  bottom: obBot,
+                  time: obTime,
+                  endTime: null,
+                });
+              }
+            }
+          }
+
+          lastStructureDirection = 'bullish';
+          // Remove from active list as it is broken
+          activeSwingHighs.splice(sIdx, 1);
+        }
+      }
+
+      // Check for breaks of active swing lows
+      for (let sIdx = activeSwingLows.length - 1; sIdx >= 0; sIdx--) {
+        const sl = activeSwingLows[sIdx];
+        if (i > sl.idx && c.close < sl.price) {
+          // Bearish Break!
+          const type = (lastStructureDirection === 'bullish' || lastStructureDirection === null) ? 'MSS' : 'BOS';
+          const shouldAdd = type === 'MSS' ? settings.ictShowMSS : settings.ictShowBOS;
+
+          if (shouldAdd) {
+            result.marketStructures.push({
+              id: `ms-bear-${sl.time}-${i}`,
+              type,
+              isBullish: false,
+              price: sl.price,
+              time: sl.time,
+              breakTime: c.time,
+            });
+
+            // Create Order Block (-OB) upon break of structure
+            if (settings.ictShowOrderBlocks) {
+              // Find highest up-close candle preceding swing low sl.idx
+              let obTop = 0;
+              let obBot = 0;
+              let obTime = 0;
+              let foundOb = false;
+
+              const lookbackLimit = Math.max(0, sl.idx - settings.ictObLookback);
+              let highestPrice = -Infinity;
+              for (let k = sl.idx; k >= lookbackLimit; k--) {
+                const candleK = workingCandles[k];
+                if (candleK.close > candleK.open) { // Up-close
+                  if (candleK.high > highestPrice) {
+                    highestPrice = candleK.high;
+                    obTop = Math.max(candleK.open, candleK.close);
+                    obBot = Math.min(candleK.open, candleK.close);
+                    obTime = candleK.time;
+                    foundOb = true;
+                  }
+                }
+              }
+
+              if (foundOb) {
+                result.orderBlocks.push({
+                  id: `ob-bear-${obTime}`,
+                  isBullish: false,
+                  top: obTop,
+                  bottom: obBot,
+                  time: obTime,
+                  endTime: null,
+                });
+              }
+            }
+          }
+
+          lastStructureDirection = 'bearish';
+          // Remove from active list
+          activeSwingLows.splice(sIdx, 1);
+        }
+      }
+    }
+  }
+
+  // Calculate Mitigations of active Order Blocks
+  result.orderBlocks.forEach(ob => {
+    // Find index of the OB candle to begin scanning mitigation from there to the end
+    let obIdx = workingCandles.findIndex(x => x.time === ob.time);
+    if (obIdx === -1) return;
+
+    for (let k = obIdx + 1; k < n; k++) {
+      const c = workingCandles[k];
+      if (ob.isBullish) {
+        // Bullish OB mitigation: price breaches the bottom of the order block
+        if (c.low < ob.bottom) {
+          ob.endTime = c.time;
+          break;
+        }
+      } else {
+        // Bearish OB mitigation: price breaches the top of the order block
+        if (c.high > ob.top) {
+          ob.endTime = c.time;
+          break;
+        }
+      }
+    }
+  });
+
+  // Sort and cap Order Blocks count
+  result.orderBlocks = result.orderBlocks
+    .sort((a, b) => b.time - a.time)
+    .slice(0, settings.ictObMaxCount);
+
+  // 4. Calculate Displacement Candles
+  if (settings.ictShowDisplacement) {
+    let bodySum = 0;
+    for (let i = 0; i < n; i++) {
+      bodySum += Math.abs(workingCandles[i].close - workingCandles[i].open);
+    }
+    const avgBody = bodySum / (n || 1);
+
+    for (let i = 1; i < n; i++) {
+      const c = workingCandles[i];
+      const body = Math.abs(c.close - c.open);
+      const atrv = atr[i] || avgBody;
+      // High body relative to recent range and ATR
+      if (body > 1.8 * avgBody && body > 1.2 * atrv) {
+        result.displacements.push(c.time);
+      }
+    }
+  }
+
+  // 5. Calculate Volume Imbalances (VI)
+  if (settings.ictShowVolumeImbalance) {
+    for (let i = 1; i < n; i++) {
+      const c1 = workingCandles[i - 1];
+      const c = workingCandles[i];
+
+      const c1MaxBody = Math.max(c1.open, c1.close);
+      const c1MinBody = Math.min(c1.open, c1.close);
+      const cMaxBody = Math.max(c.open, c.close);
+      const cMinBody = Math.min(c.open, c.close);
+
+      // Bullish VI: gap between c1 close/body top and c open/body bottom
+      if (cMinBody > c1MaxBody && c.open > c1.close) {
+        result.volumeImbalances.push({
+          id: `vi-bull-${c.time}`,
+          isBullish: true,
+          top: cMinBody,
+          bottom: c1MaxBody,
+          time: c.time,
+          endTime: null,
+        });
+      }
+      // Bearish VI: gap between c1 body bottom and c body top
+      else if (cMaxBody < c1MinBody && c.open < c1.close) {
+        result.volumeImbalances.push({
+          id: `vi-bear-${c.time}`,
+          isBullish: false,
+          top: c1MinBody,
+          bottom: cMaxBody,
+          time: c.time,
+          endTime: null,
+        });
+      }
+    }
+
+    // Process mitigations of Volume Imbalances
+    result.volumeImbalances.forEach(vi => {
+      const viIdx = workingCandles.findIndex(x => x.time === vi.time);
+      if (viIdx === -1) return;
+
+      for (let k = viIdx + 1; k < n; k++) {
+        const c = workingCandles[k];
+        if (vi.isBullish) {
+          // If subsequent price fills or crosses below the bottom of the gap
+          if (c.low <= vi.bottom) {
+            vi.endTime = c.time;
+            break;
+          }
+        } else {
+          // If subsequent price fills or crosses above the top of the gap
+          if (c.high >= vi.top) {
+            vi.endTime = c.time;
+            break;
+          }
+        }
+      }
+    });
+
+    // Cap volume imbalances
+    result.volumeImbalances = result.volumeImbalances
+      .sort((a, b) => b.time - a.time)
+      .slice(0, settings.ictViMaxBoxes);
+  }
+
+  // 6. Calculate Buyside / Sellside Liquidity (BSL & SSL)
+  if (settings.ictShowLiquidity) {
+    // We use swing points with lookback based on sensitivity
+    const liqLookback = Math.max(5, Math.round(settings.ictLiqSensitivity * 5));
+
+    const isLiqHigh = (idx: number): boolean => {
+      if (idx < liqLookback || idx >= n - liqLookback) return false;
+      const h = workingCandles[idx].high;
+      for (let j = idx - liqLookback; j <= idx + liqLookback; j++) {
+        if (j !== idx && workingCandles[j].high >= h) return false;
+      }
+      return true;
+    };
+
+    const isLiqLow = (idx: number): boolean => {
+      if (idx < liqLookback || idx >= n - liqLookback) return false;
+      const l = workingCandles[idx].low;
+      for (let j = idx - liqLookback; j <= idx + liqLookback; j++) {
+        if (j !== idx && workingCandles[j].low <= l) return false;
+      }
+      return true;
+    };
+
+    for (let i = 0; i < n; i++) {
+      const c = workingCandles[i];
+      if (isLiqHigh(i)) {
+        result.liquidityZones.push({
+          id: `liq-bsl-${c.time}`,
+          isBuyside: true,
+          price: c.high,
+          time: c.time,
+          endTime: null,
+        });
+      }
+      if (isLiqLow(i)) {
+        result.liquidityZones.push({
+          id: `liq-ssl-${c.time}`,
+          isBuyside: false,
+          price: c.low,
+          time: c.time,
+          endTime: null,
+        });
+      }
+    }
+
+    // Determine sweep times (mitigation)
+    result.liquidityZones.forEach(lz => {
+      const lzIdx = workingCandles.findIndex(x => x.time === lz.time);
+      if (lzIdx === -1) return;
+
+      for (let k = lzIdx + 1; k < n; k++) {
+        const c = workingCandles[k];
+        if (lz.isBuyside) {
+          if (c.high > lz.price) {
+            lz.endTime = c.time;
+            break;
+          }
+        } else {
+          if (c.low < lz.price) {
+            lz.endTime = c.time;
+            break;
+          }
+        }
+      }
+    });
+
+    // Cap liquidity zones count
+    result.liquidityZones = result.liquidityZones
+      .sort((a, b) => b.time - a.time)
+      .slice(0, settings.ictLiqMaxBoxes);
+  }
+
+  // 7. Calculate Fair Value Gaps (FVG), Inverted FVGs (IFVGs) & Balance Price Ranges (BPR)
+  if (settings.ictFvgOption !== 'NONE') {
+    const rawFvgs: IctFvgZone[] = [];
+
+    for (let i = 3; i < n; i++) {
+      const c1 = workingCandles[i - 1];
+      const c3 = workingCandles[i - 3];
+
+      // Bullish FVG
+      if (c1.low > c3.high && settings.ictFvgShowBullish !== false) {
+        rawFvgs.push({
+          id: `fvg-bull-${workingCandles[i - 1].time}`,
+          isBullish: true,
+          isInverted: false,
+          isBpr: false,
+          top: c1.low,
+          bottom: c3.high,
+          time: c1.time,
+          endTime: null,
+        });
+      }
+
+      // Bearish FVG
+      if (c1.high < c3.low && settings.ictFvgShowBearish !== false) {
+        rawFvgs.push({
+          id: `fvg-bear-${workingCandles[i - 1].time}`,
+          isBullish: false,
+          isInverted: false,
+          isBpr: false,
+          top: c3.low,
+          bottom: c1.high,
+          time: c1.time,
+          endTime: null,
+        });
+      }
+    }
+
+    // Check mitigation & Inversion
+    rawFvgs.forEach(f => {
+      const fIdx = workingCandles.findIndex(x => x.time === f.time);
+      if (fIdx === -1) return;
+
+      for (let k = fIdx + 1; k < n; k++) {
+        const c = workingCandles[k];
+        if (f.isBullish) {
+          // Standard mitigation: price drops below FVG top (or 50% fill/bottom)
+          // For LuxAlgo ICT, standard FVG mitigation is typically Touch/Fill of the opposite side (bottom)
+          // If we support IFVG option: when a Bullish FVG is CLOSED below its bottom, it becomes an Inverted FVG!
+          if (c.close < f.bottom) {
+            if (settings.ictFvgOption === 'IFVG') {
+              f.isInverted = true;
+              f.isBullish = false; // turns bearish inverted FVG
+              // Check if inverted FVG gets mitigated by crossing above the original top
+              let invMitigated = false;
+              for (let m = k + 1; m < n; m++) {
+                if (workingCandles[m].close > f.top) {
+                  f.endTime = workingCandles[m].time;
+                  invMitigated = true;
+                  break;
+                }
+              }
+              if (!invMitigated) {
+                f.endTime = null; // stays active as IFVG
+              }
+            } else {
+              f.endTime = c.time;
+            }
+            break;
+          }
+        } else {
+          // Bearish FVG: price closes above its top
+          if (c.close > f.top) {
+            if (settings.ictFvgOption === 'IFVG') {
+              f.isInverted = true;
+              f.isBullish = true; // turns bullish inverted FVG
+              let invMitigated = false;
+              for (let m = k + 1; m < n; m++) {
+                if (workingCandles[m].close < f.bottom) {
+                  f.endTime = workingCandles[m].time;
+                  invMitigated = true;
+                  break;
+                }
+              }
+              if (!invMitigated) {
+                f.endTime = null; // stays active as IFVG
+              }
+            } else {
+              f.endTime = c.time;
+            }
+            break;
+          }
+        }
+      }
+    });
+
+    // Detect Balance Price Range (BPR)
+    // Overlapping of bullish and bearish FVGs
+    if (settings.ictFvgBalancePriceRange) {
+      const bprs: IctFvgZone[] = [];
+      const bulls = rawFvgs.filter(f => f.isBullish && !f.isInverted);
+      const bears = rawFvgs.filter(f => !f.isBullish && !f.isInverted);
+
+      bulls.forEach(b => {
+        bears.forEach(br => {
+          // Check overlapping of [b.bottom, b.top] and [br.bottom, br.top]
+          const overlapMin = Math.max(b.bottom, br.bottom);
+          const overlapMax = Math.min(b.top, br.top);
+
+          if (overlapMin < overlapMax && Math.abs(b.time - br.time) < 18000) { // overlap exists and formed relatively near each other
+            bprs.push({
+              id: `bpr-${b.time}-${br.time}`,
+              isBullish: b.time > br.time ? b.isBullish : br.isBullish,
+              isInverted: false,
+              isBpr: true,
+              top: overlapMax,
+              bottom: overlapMin,
+              time: Math.max(b.time, br.time),
+              endTime: b.endTime || br.endTime,
+            });
+          }
+        });
+      });
+
+      // Filter out overlapping FVGs from main list if we are highlighting BPRs, or keep them
+      result.fvgs.push(...bprs);
+    }
+
+    result.fvgs.push(...rawFvgs);
+
+    // Filter and cap
+    result.fvgs = result.fvgs
+      .sort((a, b) => b.time - a.time)
+      .slice(0, settings.ictFvgMaxCount);
+  }
+
+  return result;
+}
+

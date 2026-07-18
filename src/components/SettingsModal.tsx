@@ -1004,6 +1004,421 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
               )}
+
+              <div className="border-t border-neutral-900 my-2" />
+
+              {/* ICT Concepts (LuxAlgo) | ProjectSyndicate */}
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-gray-200">ICT Concepts (LuxAlgo) | ProjectSyndicate</span>
+                  <span className="text-xs text-gray-500">Premium market structure, order blocks, liquidities, volume imbalances, & FVG</span>
+                </div>
+                <input
+                  id="settings-toggle-ict-concepts"
+                  type="checkbox"
+                  checked={settings.indicators.showIctConcepts}
+                  onChange={(e) => handleUpdateIndicators('showIctConcepts', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-neutral-800 rounded border-neutral-700 focus:ring-blue-500 focus:ring-2"
+                />
+              </div>
+
+              {settings.indicators.showIctConcepts && (
+                <div className="space-y-4 pl-3 border-l-2 border-neutral-800">
+                  
+                  {/* Mode & Universal Settings */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Universal Settings</span>
+                    
+                    <div className="flex items-center justify-between p-3 bg-neutral-900 rounded-lg border border-neutral-850">
+                      <span className="text-sm font-medium text-gray-300">Analysis Mode</span>
+                      <select
+                        id="settings-select-ict-mode"
+                        value={settings.indicators.ictMode}
+                        onChange={(e) => handleUpdateIndicators('ictMode', e.target.value)}
+                        className="w-32 px-2.5 py-1 bg-neutral-950 border border-neutral-800 rounded text-sm text-white focus:outline-none"
+                      >
+                        <option value="Present">Present (500 Bars)</option>
+                        <option value="Historical">Historical (Full)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Market Structure (MSS & BOS) */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Market Structure (MSS & BOS)</span>
+                      <input
+                        id="settings-toggle-ict-ms"
+                        type="checkbox"
+                        checked={settings.indicators.ictShowMarketStructure}
+                        onChange={(e) => handleUpdateIndicators('ictShowMarketStructure', e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {settings.indicators.ictShowMarketStructure && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pl-2.5">
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Swing Point Length</span>
+                          <input
+                            id="settings-input-ict-ms-length"
+                            type="number"
+                            min={2}
+                            max={50}
+                            value={settings.indicators.ictMsLength}
+                            onChange={(e) => handleUpdateIndicators('ictMsLength', parseInt(e.target.value) || 8)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Show Market Structure Shift (MSS)</span>
+                          <input
+                            id="settings-toggle-ict-mss"
+                            type="checkbox"
+                            checked={settings.indicators.ictShowMSS}
+                            onChange={(e) => handleUpdateIndicators('ictShowMSS', e.target.checked)}
+                            className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Show Break of Structure (BOS)</span>
+                          <input
+                            id="settings-toggle-ict-bos"
+                            type="checkbox"
+                            checked={settings.indicators.ictShowBOS}
+                            onChange={(e) => handleUpdateIndicators('ictShowBOS', e.target.checked)}
+                            className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">MSS Bull/Bear Colors</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="settings-color-ict-mss-bull"
+                              type="color"
+                              value={settings.indicators.ictMssColorBullish}
+                              onChange={(e) => handleUpdateIndicators('ictMssColorBullish', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                            <input
+                              id="settings-color-ict-mss-bear"
+                              type="color"
+                              value={settings.indicators.ictMssColorBearish}
+                              onChange={(e) => handleUpdateIndicators('ictMssColorBearish', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">BOS Bull/Bear Colors</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="settings-color-ict-bos-bull"
+                              type="color"
+                              value={settings.indicators.ictBosColorBullish}
+                              onChange={(e) => handleUpdateIndicators('ictBosColorBullish', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                            <input
+                              id="settings-color-ict-bos-bear"
+                              type="color"
+                              value={settings.indicators.ictBosColorBearish}
+                              onChange={(e) => handleUpdateIndicators('ictBosColorBearish', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Order Blocks (OB) */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Order Blocks (OB)</span>
+                      <input
+                        id="settings-toggle-ict-ob"
+                        type="checkbox"
+                        checked={settings.indicators.ictShowOrderBlocks}
+                        onChange={(e) => handleUpdateIndicators('ictShowOrderBlocks', e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                      />
+                    </div>
+
+                    {settings.indicators.ictShowOrderBlocks && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pl-2.5">
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Lookback Period</span>
+                          <input
+                            id="settings-input-ict-ob-lookback"
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={settings.indicators.ictObLookback}
+                            onChange={(e) => handleUpdateIndicators('ictObLookback', parseInt(e.target.value) || 5)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Max Rendered Blocks</span>
+                          <input
+                            id="settings-input-ict-ob-max"
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={settings.indicators.ictObMaxCount}
+                            onChange={(e) => handleUpdateIndicators('ictObMaxCount', parseInt(e.target.value) || 5)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Bull/Bear Colors</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="settings-color-ict-ob-bull"
+                              type="color"
+                              value={settings.indicators.ictObBullishColor}
+                              onChange={(e) => handleUpdateIndicators('ictObBullishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                            <input
+                              id="settings-color-ict-ob-bear"
+                              type="color"
+                              value={settings.indicators.ictObBearishColor}
+                              onChange={(e) => handleUpdateIndicators('ictObBearishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Liquidity (BSL & SSL) */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Buyside & Sellside Liquidity</span>
+                      <input
+                        id="settings-toggle-ict-liq"
+                        type="checkbox"
+                        checked={settings.indicators.ictShowLiquidity}
+                        onChange={(e) => handleUpdateIndicators('ictShowLiquidity', e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                      />
+                    </div>
+
+                    {settings.indicators.ictShowLiquidity && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pl-2.5">
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Sensitivity Multiplier</span>
+                          <input
+                            id="settings-input-ict-liq-sens"
+                            type="number"
+                            step={0.1}
+                            min={0.5}
+                            max={10}
+                            value={settings.indicators.ictLiqSensitivity}
+                            onChange={(e) => handleUpdateIndicators('ictLiqSensitivity', parseFloat(e.target.value) || 2.3)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Max Visibility Cap</span>
+                          <input
+                            id="settings-input-ict-liq-max"
+                            type="number"
+                            min={5}
+                            max={100}
+                            value={settings.indicators.ictLiqMaxBoxes}
+                            onChange={(e) => handleUpdateIndicators('ictLiqMaxBoxes', parseInt(e.target.value) || 50)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">SSL (Bullish) / BSL (Bearish) Colors</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="settings-color-ict-liq-bull"
+                              type="color"
+                              value={settings.indicators.ictLiqBullishColor}
+                              onChange={(e) => handleUpdateIndicators('ictLiqBullishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                            <input
+                              id="settings-color-ict-liq-bear"
+                              type="color"
+                              value={settings.indicators.ictLiqBearishColor}
+                              onChange={(e) => handleUpdateIndicators('ictLiqBearishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Volume Imbalances */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Volume Imbalances</span>
+                      <input
+                        id="settings-toggle-ict-vi"
+                        type="checkbox"
+                        checked={settings.indicators.ictShowVolumeImbalance}
+                        onChange={(e) => handleUpdateIndicators('ictShowVolumeImbalance', e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                      />
+                    </div>
+
+                    {settings.indicators.ictShowVolumeImbalance && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pl-2.5">
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Max Boxes Limit</span>
+                          <input
+                            id="settings-input-ict-vi-max"
+                            type="number"
+                            min={5}
+                            max={200}
+                            value={settings.indicators.ictViMaxBoxes}
+                            onChange={(e) => handleUpdateIndicators('ictViMaxBoxes', parseInt(e.target.value) || 100)}
+                            className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                          <span className="text-xs text-neutral-400">Bull/Bear Colors</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="settings-color-ict-vi-bull"
+                              type="color"
+                              value={settings.indicators.ictViBullishColor}
+                              onChange={(e) => handleUpdateIndicators('ictViBullishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                            <input
+                              id="settings-color-ict-vi-bear"
+                              type="color"
+                              value={settings.indicators.ictViBearishColor}
+                              onChange={(e) => handleUpdateIndicators('ictViBearishColor', e.target.value)}
+                              className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* FVG, IFVG, & BPR */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Imbalances (FVG, IFVG & BPR)</span>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pl-2.5">
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Imbalance Option</span>
+                        <select
+                          id="settings-select-ict-fvg-opt"
+                          value={settings.indicators.ictFvgOption}
+                          onChange={(e) => handleUpdateIndicators('ictFvgOption', e.target.value)}
+                          className="px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white"
+                        >
+                          <option value="FVG">Standard FVG</option>
+                          <option value="IFVG">Inverted FVG (IFVG)</option>
+                          <option value="NONE">None</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Max Boxes Count</span>
+                        <input
+                          id="settings-input-ict-fvg-max"
+                          type="number"
+                          min={5}
+                          max={100}
+                          value={settings.indicators.ictFvgMaxCount}
+                          onChange={(e) => handleUpdateIndicators('ictFvgMaxCount', parseInt(e.target.value) || 20)}
+                          className="w-16 px-1.5 py-0.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-white text-center font-mono"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Show Bullish FVG</span>
+                        <input
+                          id="settings-toggle-ict-fvg-bullish"
+                          type="checkbox"
+                          checked={settings.indicators.ictFvgShowBullish}
+                          onChange={(e) => handleUpdateIndicators('ictFvgShowBullish', e.target.checked)}
+                          className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Show Bearish FVG</span>
+                        <input
+                          id="settings-toggle-ict-fvg-bearish"
+                          type="checkbox"
+                          checked={settings.indicators.ictFvgShowBearish}
+                          onChange={(e) => handleUpdateIndicators('ictFvgShowBearish', e.target.checked)}
+                          className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Balanced Price Range (BPR)</span>
+                        <input
+                          id="settings-toggle-ict-fvg-bpr"
+                          type="checkbox"
+                          checked={settings.indicators.ictFvgBalancePriceRange}
+                          onChange={(e) => handleUpdateIndicators('ictFvgBalancePriceRange', e.target.checked)}
+                          className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-neutral-950 rounded border border-neutral-900">
+                        <span className="text-xs text-neutral-400">Bull/Bear Colors</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            id="settings-color-ict-fvg-bull"
+                            type="color"
+                            value={settings.indicators.ictFvgBullishColor}
+                            onChange={(e) => handleUpdateIndicators('ictFvgBullishColor', e.target.value)}
+                            className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                          />
+                          <input
+                            id="settings-color-ict-fvg-bear"
+                            type="color"
+                            value={settings.indicators.ictFvgBearishColor}
+                            onChange={(e) => handleUpdateIndicators('ictFvgBearishColor', e.target.value)}
+                            className="w-6 h-5 bg-transparent border-0 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Displacement Highlight */}
+                  <div className="space-y-2 border-t border-neutral-900 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Highlight Displacement</span>
+                      <input
+                        id="settings-toggle-ict-disp"
+                        type="checkbox"
+                        checked={settings.indicators.ictShowDisplacement}
+                        onChange={(e) => handleUpdateIndicators('ictShowDisplacement', e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 bg-neutral-800 rounded border-neutral-700"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+              )}
             </div>
           )}
 

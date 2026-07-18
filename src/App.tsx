@@ -12,6 +12,8 @@ import { SymbolSelectorModal } from './components/SymbolSelectorModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Drawing, DrawingType, ChartSettings, TimeframeId } from './types';
 import { ShieldAlert, TrendingUp, Compass, Activity } from 'lucide-react';
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import { LoginPage } from './components/LoginPage';
 
 const DEFAULT_SETTINGS: ChartSettings = {
   theme: 'dark',
@@ -89,7 +91,40 @@ const DEFAULT_SETTINGS: ChartSettings = {
     fvgMinGapSize: 0.0,
     fvgUseATRFilter: true,
     fvgAtrMultiplier: 0.5,
-    fvgAtrLength: 14
+    fvgAtrLength: 14,
+    // ICT Concepts Defaults
+    showIctConcepts: false,
+    ictMode: 'Present',
+    ictShowMarketStructure: true,
+    ictMsLength: 8,
+    ictShowMSS: true,
+    ictShowBOS: true,
+    ictMssColorBullish: '#00b0ff',
+    ictMssColorBearish: '#ff3d00',
+    ictBosColorBullish: '#00e676',
+    ictBosColorBearish: '#ff1744',
+    ictShowDisplacement: true,
+    ictShowVolumeImbalance: true,
+    ictViMaxBoxes: 100,
+    ictViBullishColor: '#00e676',
+    ictViBearishColor: '#ff1744',
+    ictShowOrderBlocks: true,
+    ictObLookback: 5,
+    ictObMaxCount: 5,
+    ictObBullishColor: '#2962ff',
+    ictObBearishColor: '#ff1744',
+    ictShowLiquidity: true,
+    ictLiqSensitivity: 2.3,
+    ictLiqMaxBoxes: 50,
+    ictLiqBullishColor: '#00838f',
+    ictLiqBearishColor: '#c62828',
+    ictFvgOption: 'FVG',
+    ictFvgShowBullish: true,
+    ictFvgShowBearish: true,
+    ictFvgMaxCount: 20,
+    ictFvgBalancePriceRange: true,
+    ictFvgBullishColor: '#089981',
+    ictFvgBearishColor: '#f23645'
   },
   connection: {
     customServer: '',
@@ -97,7 +132,8 @@ const DEFAULT_SETTINGS: ChartSettings = {
   }
 };
 
-export default function App() {
+function AppContent() {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [selectedSymbol, setSelectedSymbol] = useState<string>('R_100'); // Default: Volatility 100 Index
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeId>('1M'); // Default: 1 Minute
   const [activeTool, setActiveTool] = useState<DrawingType>('cursor');
@@ -206,6 +242,19 @@ export default function App() {
 
   const activeSymbolInfo = symbols.find(s => s.symbol === selectedSymbol);
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-[#09090b] text-[#fafafa] font-sans">
+        <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <span className="text-sm text-neutral-400 font-medium tracking-wide">Validating Secure Session...</span>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
     <div 
       id="app-root-container"
@@ -312,5 +361,13 @@ export default function App() {
         initialTab={settingsTab}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
