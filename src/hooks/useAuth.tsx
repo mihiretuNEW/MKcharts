@@ -18,10 +18,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async (): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/check');
+      const localToken = localStorage.getItem('site_auth_token');
+      const headers: Record<string, string> = {};
+      if (localToken) {
+        headers['Authorization'] = `Bearer ${localToken}`;
+      }
+
+      const response = await fetch('/api/auth/check', { headers });
       if (response.ok) {
         const data = await response.json();
         setIsAuthenticated(!!data.authenticated);
+        if (data.authenticated && data.token) {
+          localStorage.setItem('site_auth_token', data.token);
+        }
         return !!data.authenticated;
       }
     } catch (err) {
@@ -44,6 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          localStorage.setItem('site_auth_token', data.token);
+        }
         setIsAuthenticated(true);
         return true;
       } else {
@@ -59,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
+      localStorage.removeItem('site_auth_token');
       // Vercel serverless function expects standard HTTP POST
       await fetch('/api/logout', { method: 'POST' });
     } catch (err) {

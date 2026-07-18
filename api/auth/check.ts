@@ -21,8 +21,27 @@ export default function handler(req: any, res: any) {
   }
 
   const cookies = parseCookies(req.headers.cookie);
-  const token = cookies['site_auth_token'];
+  let token = cookies['site_auth_token'];
+
+  // Check Authorization header if cookie is missing
+  if (!token && req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
 
   const isValid = verifyToken(token);
-  return res.status(200).json({ authenticated: isValid });
+
+  if (isValid && token) {
+    // If the request was authorized, make sure the cookie is set/restored
+    const isProd = process.env.NODE_ENV === 'production';
+    let cookie = `site_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3153600000`;
+    if (isProd) {
+      cookie += '; Secure';
+    }
+    res.setHeader('Set-Cookie', cookie);
+  }
+
+  return res.status(200).json({ authenticated: isValid, token: isValid ? token : undefined });
 }

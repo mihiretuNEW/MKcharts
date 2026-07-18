@@ -18,14 +18,14 @@ export default function handler(req: any, res: any) {
     const token = createToken();
     const isProd = process.env.NODE_ENV === 'production';
     
-    // Set cookie: HttpOnly, SameSite=Lax, Max-Age=30 days (2592000 seconds)
-    let cookie = `site_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`;
+    // Set cookie: HttpOnly, SameSite=Lax, Max-Age=100 years (3153600000 seconds)
+    let cookie = `site_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3153600000`;
     if (isProd) {
       cookie += '; Secure';
     }
     
     res.setHeader('Set-Cookie', cookie);
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, token });
   } else {
     return res.status(401).json({ error: 'Incorrect password' });
   }

@@ -10,8 +10,8 @@ export interface TokenPayload {
 }
 
 export function createToken(): string {
-  // Token expires in 30 days
-  const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  // Token expires in 100 years (practically unlimited)
+  const expiresAt = Date.now() + 100 * 365 * 24 * 60 * 60 * 1000;
   const payload: TokenPayload = {
     authorized: true,
     expiresAt,
